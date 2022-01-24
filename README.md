@@ -2,7 +2,7 @@
 
 Programas hechos con python para el hacking etico.
 Estos programas permitar obtener informacion como el escaneo de puertos, convertir dominios a direcciones IP, 
-escabear multiples objetivos, obtener los banners de los puertos abiertos y muchos mas.
+escanear multiples objetivos, obtener los banners de los puertos abiertos y muchos mas.
 
 
 Programs for ethical hacking made with python. 
